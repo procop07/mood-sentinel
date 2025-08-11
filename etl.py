@@ -11,6 +11,8 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 import requests
+import pandas as pd
+import os
 
 # Optional tweepy import - Twitter integration is optional
 try:
@@ -288,6 +290,10 @@ class DataExtractor:
         # Initialize database manager
         self.db_manager = DatabaseManager(config)
     
+    def add_source(self, source: DataSource):
+        """Adds a data source to the extractor."""
+        self.sources.append(source)
+
     def extract_all(self) -> List[SocialMediaPost]:
         """Extract data from all enabled sources."""
         all_posts = []
@@ -310,3 +316,68 @@ class DataExtractor:
     def get_stored_data(self, hours: int = 24) -> List[SocialMediaPost]:
         """Get stored data from database."""
         return self.db_manager.get_recent_posts(hours)
+
+
+class CsvDataSource(DataSource):
+    """Data source for reading health data from CSV files."""
+
+    def __init__(self, config: dict, csv_dir: str):
+        """
+        Initializes the CsvDataSource.
+        Args:
+            config: The application configuration dictionary.
+            csv_dir: The directory containing the CSV files.
+        """
+        super().__init__(config)
+        self.csv_dir = csv_dir
+        self.enabled = os.path.isdir(csv_dir)
+        if not self.enabled:
+            self.logger.warning(f"CSV directory not found or not a directory: {csv_dir}")
+
+    def extract(self, limit: int = 10000) -> List[SocialMediaPost]:
+        """Extracts data from all CSV files in the directory."""
+        if not self.enabled:
+            return []
+
+        all_posts = []
+        for filename in os.listdir(self.csv_dir):
+            if filename.endswith(".csv"):
+                file_path = os.path.join(self.csv_dir, filename)
+                try:
+                    df = pd.read_csv(file_path)
+                    filename_without_ext = os.path.splitext(filename)[0]
+
+                    for index, row in df.iterrows():
+                        if len(all_posts) >= limit:
+                            break
+
+                        row_dict = row.to_dict()
+                        timestamp_str = row_dict.get('timestamp')
+                        if not timestamp_str:
+                            self.logger.warning(f"Skipping row {index} in {filename} due to missing timestamp.")
+                            continue
+
+                        try:
+                            timestamp = datetime.fromisoformat(timestamp_str)
+                        except ValueError:
+                            self.logger.warning(f"Skipping row {index} in {filename} due to invalid timestamp format: {timestamp_str}")
+                            continue
+
+                        post = SocialMediaPost(
+                            id=f"csv_{filename_without_ext}_{index}",
+                            platform="csv_import",
+                            author="user_1",
+                            content=f"{filename_without_ext} data point at {timestamp_str}",
+                            timestamp=timestamp,
+                            metadata=row_dict
+                        )
+                        all_posts.append(post)
+
+                except Exception as e:
+                    self.logger.error(f"Error processing CSV file {filename}: {e}")
+
+            if len(all_posts) >= limit:
+                break
+
+        self.logger.info(f"Extracted {len(all_posts)} records from CSV files in {self.csv_dir}")
+        return all_posts

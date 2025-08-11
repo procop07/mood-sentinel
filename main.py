@@ -200,6 +200,7 @@ def main():
     parser.add_argument('--date', help='Target date for report (YYYY-MM-DD format)')
     parser.add_argument('--weekly', action='store_true', help='Generate weekly report')
     parser.add_argument('--no-telegram', action='store_true', help='Disable Telegram notifications')
+    parser.add_argument('--csv-dir', help='Directory path for CSV data files')
     args = parser.parse_args()
     
     # Load configuration
@@ -233,6 +234,12 @@ def main():
     try:
         # Initialize components
         extractor = DataExtractor(config)
+
+        if args.csv_dir:
+            from etl import CsvDataSource
+            csv_source = CsvDataSource(config, args.csv_dir)
+            extractor.add_source(csv_source)
+
         feature_extractor = FeatureExtractor(config)
         rule_engine = MoodRules(config)
         notification_service = NotificationService(config)
@@ -251,11 +258,10 @@ def main():
                 
                 # Apply rules and detect issues - need to adapt to MoodRules interface
                 alerts = []
-                for data_point in raw_data:
-                    # Assuming each data point has a mood_score and user_id
-                    mood_score = data_point.get('mood_score', 0.5)  # Default neutral
-                    user_id = data_point.get('user_id', 'unknown')
-                    
+                for feature in features:
+                    mood_score = feature.sentiment_score
+                    user_id = feature.author_activity.get('author', 'unknown')
+
                     evaluation = rule_engine.evaluate_mood_score(mood_score, user_id)
                     if evaluation['action_required']:
                         alert = {

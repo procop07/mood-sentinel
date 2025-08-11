@@ -17,7 +17,7 @@ api:
 
 # Test sample execution target
 test-sample:
-	$(PYTHON) main.py --mode=test-sample
+	$(PYTHON) main.py --csv-dir samples/data --once --no-telegram
 
 # Help target
 help:
