@@ -1,0 +1,49 @@
+# Mood Sentinel Configuration
+
+# Data Sources
+sources:
+  social_media:
+    twitter:
+      enabled: true
+      api_version: "v2"
+    facebook:
+      enabled: false
+    telegram:
+      enabled: true
+
+# Processing Settings
+processing:
+  sentiment_analysis:
+    model: "transformer"
+    threshold: 0.7
+  
+  keywords:
+    negative: ["hate", "anger", "violence", "threat"]
+    positive: ["love", "peace", "hope", "support"]
+
+# Alert Settings
+alerting:
+  email:
+    enabled: true
+    smtp_server: "smtp.gmail.com"
+    port: 587
+  
+  slack:
+    enabled: false
+    webhook_url: ""
+
+# Monitoring
+monitoring:
+  interval_minutes: 15
+  batch_size: 100
+  max_retries: 3
+
+# Database
+database:
+  type: "sqlite"
+  path: "mood_data.db"
+
+# Logging
+logging:
+  level: "INFO"
+  file: "mood-sentinel.log"
