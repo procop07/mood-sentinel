@@ -4,6 +4,7 @@ Mood Sentinel - Main Application Entry Point
 A social media mood monitoring system that tracks sentiment
 and alerts on concerning patterns.
 """
+
 import sys
 import logging
 import argparse
@@ -11,10 +12,11 @@ import sqlite3
 from datetime import datetime
 import yaml
 import os
+
 from etl import DataExtractor
 from features import FeatureExtractor
 from rules import MoodRules
-from report import ReportGenerator
+from report import semantic_summary
 from notify import NotificationService
 
 def load_config(config_path: str) -> dict:
@@ -157,6 +159,39 @@ def process_alerts(alerts: list, features: dict, config: dict, args: argparse.Na
     
     logger.warning(f"Processed {len(alerts)} alerts, saved to database and daily report")
 
+def create_alert_report(alerts: list, features: dict) -> str:
+    """Create a report for alerts using semantic_summary function."""
+    if not alerts:
+        return "No alerts to report."
+    
+    # Convert alerts to format expected by semantic_summary
+    analysis_results = []
+    for alert in alerts:
+        result = {
+            'timestamp': alert.get('timestamp', datetime.now().isoformat()),
+            'overall_risk_level': alert.get('severity', 'medium').lower(),
+            alert.get('type', 'unknown'): {
+                'detected': True,
+                'count': 1
+            }
+        }
+        analysis_results.append(result)
+    
+    # Use semantic_summary function to generate report
+    summary_result = semantic_summary(analysis_results, "24h")
+    return f"Alert Report:\n{summary_result.get('summary', 'No summary available')}"
+
+def create_periodic_report(features: dict) -> str:
+    """Create a periodic report."""
+    report_lines = []
+    report_lines.append(f"MOOD SENTINEL PERIODIC REPORT - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    report_lines.append("=" * 60)
+    report_lines.append("System Status: Operational")
+    report_lines.append(f"Features processed: {len(features) if features else 0}")
+    report_lines.append(f"Report generated at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    return "\n".join(report_lines)
+
 def main():
     """Main application entry point."""
     parser = argparse.ArgumentParser(description='Mood Sentinel - Social Media Mood Monitor')
@@ -200,7 +235,6 @@ def main():
         extractor = DataExtractor(config)
         feature_extractor = FeatureExtractor(config)
         rule_engine = MoodRules(config)
-        report_generator = ReportGenerator(config)
         notification_service = NotificationService(config)
         
         # Main processing loop
@@ -239,8 +273,8 @@ def main():
                     # Process alerts (save summary/actions, database, and write reports)
                     process_alerts(alerts, features, config, args, db_path)
                     
-                    # Generate reports
-                    report = report_generator.create_alert_report(alerts, features)
+                    # Generate reports using functions instead of class methods
+                    report = create_alert_report(alerts, features)
                     
                     # Send notifications (unless disabled)
                     if not args.no_telegram:
@@ -250,7 +284,7 @@ def main():
                 
                 # Generate periodic reports
                 if should_generate_report(config, args):
-                    periodic_report = report_generator.create_periodic_report(features)
+                    periodic_report = create_periodic_report(features)
                     save_report_to_file(periodic_report, args.date if hasattr(args, 'date') else None)
                     
                     if not args.no_telegram:
