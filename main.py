@@ -13,7 +13,7 @@ import yaml
 import os
 from etl import DataExtractor
 from features import FeatureExtractor
-from rules import RuleEngine
+from rules import MoodRules
 from report import ReportGenerator
 from notify import NotificationService
 
@@ -199,7 +199,7 @@ def main():
         # Initialize components
         extractor = DataExtractor(config)
         feature_extractor = FeatureExtractor(config)
-        rule_engine = RuleEngine(config)
+        rule_engine = MoodRules(config)
         report_generator = ReportGenerator(config)
         notification_service = NotificationService(config)
         
@@ -215,8 +215,23 @@ def main():
                 # Extract features
                 features = feature_extractor.process(raw_data)
                 
-                # Apply rules and detect issues
-                alerts = rule_engine.evaluate(features)
+                # Apply rules and detect issues - need to adapt to MoodRules interface
+                alerts = []
+                for data_point in raw_data:
+                    # Assuming each data point has a mood_score and user_id
+                    mood_score = data_point.get('mood_score', 0.5)  # Default neutral
+                    user_id = data_point.get('user_id', 'unknown')
+                    
+                    evaluation = rule_engine.evaluate_mood_score(mood_score, user_id)
+                    if evaluation['action_required']:
+                        alert = {
+                            'type': evaluation['alert_level'],
+                            'severity': evaluation['alert_level'],
+                            'summary': evaluation['message'],
+                            'actions': evaluation['recommendations'],
+                            'timestamp': evaluation['timestamp'].isoformat()
+                        }
+                        alerts.append(alert)
                 
                 if alerts:
                     logger.warning(f"Generated {len(alerts)} alerts")
