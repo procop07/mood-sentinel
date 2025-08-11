@@ -1,0 +1,11 @@
+timestamp,activity_type,duration_minutes,steps,distance_km,calories_burned,intensity
+2025-08-01 07:00:00,walking,30,3250,2.4,120,moderate
+2025-08-01 18:30:00,running,25,3800,4.2,350,vigorous
+2025-08-02 06:30:00,cycling,45,0,15.3,480,moderate
+2025-08-02 19:00:00,swimming,35,0,0,315,vigorous
+2025-08-03 08:00:00,walking,40,4200,3.1,155,light
+2025-08-03 17:00:00,strength_training,50,850,0,275,moderate
+2025-08-04 07:15:00,yoga,60,350,0,180,light
+2025-08-04 16:30:00,running,20,2980,3.8,290,vigorous
+2025-08-05 09:00:00,walking,25,2750,2.0,95,light
+2025-08-05 20:00:00,dancing,40,1950,0,220,moderate
