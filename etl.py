@@ -1,10 +1,8 @@
 """
 ETL Module - Extract, Transform, Load
-
 Handles data extraction from various social media sources,
 data transformation, and storage operations.
 """
-
 import logging
 import sqlite3
 import json
@@ -12,10 +10,15 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
-
 import requests
-import tweepy
 
+# Optional tweepy import - Twitter integration is optional
+try:
+    import tweepy
+    TWEEPY_AVAILABLE = True
+except ImportError:
+    TWEEPY_AVAILABLE = False
+    tweepy = None
 
 @dataclass
 class SocialMediaPost:
@@ -40,7 +43,6 @@ class SocialMediaPost:
         if self.metadata is None:
             self.metadata = {}
 
-
 class DataSource(ABC):
     """Abstract base class for data sources."""
     
@@ -53,7 +55,6 @@ class DataSource(ABC):
         """Extract data from the source."""
         pass
 
-
 class TwitterDataSource(DataSource):
     """Twitter data extraction using Twitter API v2."""
     
@@ -63,6 +64,11 @@ class TwitterDataSource(DataSource):
         
         if not twitter_config.get('enabled', False):
             self.logger.warning("Twitter source is disabled")
+            self.enabled = False
+            return
+            
+        if not TWEEPY_AVAILABLE:
+            self.logger.warning("tweepy library not available - Twitter source disabled")
             self.enabled = False
             return
             
@@ -143,7 +149,6 @@ class TwitterDataSource(DataSource):
         import re
         return re.findall(r'@\w+', text)
 
-
 class TelegramDataSource(DataSource):
     """Telegram data extraction."""
     
@@ -160,7 +165,6 @@ class TelegramDataSource(DataSource):
         # Placeholder for Telegram extraction
         self.logger.info("Telegram extraction not implemented yet")
         return []
-
 
 class DatabaseManager:
     """Handles database operations for storing extracted data."""
@@ -268,7 +272,6 @@ class DatabaseManager:
                 posts.append(post)
         
         return posts
-
 
 class DataExtractor:
     """Main ETL coordinator class."""
