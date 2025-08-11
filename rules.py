@@ -1,10 +1,8 @@
 """
 Mood Sentinel - Rules Engine
-
 This module contains the business rules for mood detection and alerting.
 It evaluates mood scores and determines when to trigger notifications.
 """
-
 import logging
 from typing import Dict, List, Any
 from datetime import datetime, timedelta
@@ -195,3 +193,101 @@ class MoodRules:
                 trend_result['message'] = f'Mood trending downward (decline: {difference:.2f})'
                 
         return trend_result
+
+
+class RuleEngine:
+    """
+    Rule engine that evaluates features and generates alerts.
+    Used by main.py for mood monitoring and alerting.
+    """
+    
+    def __init__(self, config: Dict[str, Any]):
+        self.config = config
+        self.logger = logging.getLogger(__name__)
+        self.mood_rules = MoodRules(config)
+        
+        # Load alert thresholds
+        self.sentiment_threshold = config.get('sentiment_threshold', -0.5)
+        self.engagement_threshold = config.get('engagement_threshold', 0.2)
+        self.volume_spike_threshold = config.get('volume_spike_threshold', 2.0)
+        
+    def evaluate(self, features: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Evaluate features and generate alerts if necessary.
+        
+        Args:
+            features: Dictionary containing extracted features from social media data
+            
+        Returns:
+            List of alert dictionaries with type, severity, timestamp, etc.
+        """
+        alerts = []
+        
+        # Check sentiment-based alerts
+        avg_sentiment = features.get('avg_sentiment', 0.0)
+        if avg_sentiment < self.sentiment_threshold:
+            alerts.append({
+                'type': 'NEGATIVE_SENTIMENT',
+                'severity': 'HIGH' if avg_sentiment < -0.8 else 'MEDIUM',
+                'timestamp': datetime.now().isoformat(),
+                'summary': f'Negative sentiment detected: {avg_sentiment:.2f}',
+                'actions': [
+                    'Monitor user closely for signs of distress',
+                    'Consider reaching out with support resources',
+                    'Track sentiment trends over time'
+                ]
+            })
+            
+        # Check engagement anomalies
+        engagement_score = features.get('engagement_score', 0.0)
+        if engagement_score < self.engagement_threshold:
+            alerts.append({
+                'type': 'LOW_ENGAGEMENT',
+                'severity': 'LOW',
+                'timestamp': datetime.now().isoformat(),
+                'summary': f'Low engagement detected: {engagement_score:.2f}',
+                'actions': [
+                    'Monitor for social withdrawal patterns',
+                    'Check if user needs support or encouragement'
+                ]
+            })
+            
+        # Check for volume spikes (unusual activity)
+        post_volume = features.get('post_volume', 0)
+        avg_volume = features.get('avg_post_volume', 1)
+        
+        if post_volume > avg_volume * self.volume_spike_threshold:
+            alerts.append({
+                'type': 'ACTIVITY_SPIKE',
+                'severity': 'MEDIUM',
+                'timestamp': datetime.now().isoformat(),
+                'summary': f'Unusual activity spike: {post_volume} posts (avg: {avg_volume})',
+                'actions': [
+                    'Review recent posts for concerning content',
+                    'Check if spike indicates manic episode or crisis'
+                ]
+            })
+            
+        # Check for keyword alerts (crisis terms)
+        crisis_keywords = features.get('crisis_keywords', [])
+        if crisis_keywords:
+            alerts.append({
+                'type': 'CRISIS_KEYWORDS',
+                'severity': 'CRITICAL',
+                'timestamp': datetime.now().isoformat(),
+                'summary': f'Crisis keywords detected: {", ".join(crisis_keywords)}',
+                'actions': [
+                    'IMMEDIATE attention required',
+                    'Contact crisis intervention team',
+                    'Reach out to user directly',
+                    'Monitor continuously'
+                ]
+            })
+            
+        # Log results
+        if alerts:
+            self.logger.warning(f"Generated {len(alerts)} alerts from feature evaluation")
+        else:
+            self.logger.info("No alerts generated from current features")
+            
+        return alerts
