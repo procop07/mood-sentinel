@@ -1,0 +1,88 @@
+version: '3.8'
+
+services:
+  # Main mood-sentinel application with API and cron
+  app:
+    build: .
+    ports:
+      - "8000:8000"  # API port
+    volumes:
+      - ./data:/app/data
+      - ./reports:/app/reports
+      - ./logs:/var/log  # Mount logs directory
+    environment:
+      - ENV=production
+      - DATABASE_URL=sqlite:///app/data/mood_sentinel.db
+    env_file:
+      - .env
+    depends_on:
+      - db
+    networks:
+      - mood-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Optional separate database container (if using PostgreSQL instead of SQLite)
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: mood_sentinel
+      POSTGRES_USER: mood_user
+      POSTGRES_PASSWORD: mood_pass
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - mood-net
+    restart: unless-stopped
+    profiles:
+      - postgres  # Enable only with 'docker-compose --profile postgres up'
+
+  # Scheduler service (alternative to cron in main container)
+  scheduler:
+    build: .
+    command: ["/bin/sh", "-c", "while true; do sleep 3600; python main.py; done"]
+    volumes:
+      - ./data:/app/data
+      - ./reports:/app/reports
+    environment:
+      - ENV=production
+      - DATABASE_URL=sqlite:///app/data/mood_sentinel.db
+    env_file:
+      - .env
+    depends_on:
+      - app
+    networks:
+      - mood-net
+    restart: unless-stopped
+    profiles:
+      - separate-scheduler  # Enable with 'docker-compose --profile separate-scheduler up'
+
+  # Nginx reverse proxy (optional)
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - app
+    networks:
+      - mood-net
+    restart: unless-stopped
+    profiles:
+      - nginx  # Enable with 'docker-compose --profile nginx up'
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  mood-net:
+    driver: bridge
