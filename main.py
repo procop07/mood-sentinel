@@ -1,24 +1,20 @@
 #!/usr/bin/env python3
 """
 Mood Sentinel - Main Application Entry Point
-
 A social media mood monitoring system that tracks sentiment
 and alerts on concerning patterns.
 """
-
 import sys
 import logging
 import argparse
 from datetime import datetime
-
 import yaml
-
+import os
 from etl import DataExtractor
 from features import FeatureExtractor
 from rules import RuleEngine
 from report import ReportGenerator
 from notify import NotificationService
-
 
 def load_config(config_path: str) -> dict:
     """Load configuration from YAML file."""
@@ -32,7 +28,6 @@ def load_config(config_path: str) -> dict:
         logging.error(f"Error parsing config: {e}")
         sys.exit(1)
 
-
 def setup_logging(config: dict) -> None:
     """Setup logging configuration."""
     logging.basicConfig(
@@ -44,12 +39,75 @@ def setup_logging(config: dict) -> None:
         ]
     )
 
+def save_report_to_file(report_content: str, report_date: str = None) -> None:
+    """Save report content to daily report file."""
+    if not report_date:
+        report_date = datetime.now().strftime('%Y-%m-%d')
+    
+    # Ensure reports directory exists
+    os.makedirs('reports', exist_ok=True)
+    
+    # Create report filename
+    report_filename = f'reports/daily_{report_date}.txt'
+    
+    # Append to or create report file
+    with open(report_filename, 'a', encoding='utf-8') as f:
+        f.write(f"\n=== {datetime.now().strftime('%H:%M:%S')} ===\n")
+        f.write(report_content)
+        f.write("\n\n")
+    
+    logging.info(f"Report saved to {report_filename}")
+
+def process_alerts(alerts: list, features: dict, config: dict, args: argparse.Namespace) -> None:
+    """Process alerts by saving summary/actions to alerts list and writing reports."""
+    logger = logging.getLogger(__name__)
+    
+    if not alerts:
+        return
+    
+    # Store summary and actions in alerts
+    for alert in alerts:
+        if 'summary' not in alert:
+            alert['summary'] = f"Alert: {alert.get('type', 'Unknown')} detected"
+        if 'actions' not in alert:
+            alert['actions'] = ["Monitor situation", "Review sentiment patterns"]
+    
+    # Create report content
+    report_lines = []
+    report_lines.append(f"MOOD SENTINEL ALERT REPORT - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    report_lines.append("=" * 60)
+    
+    for i, alert in enumerate(alerts, 1):
+        report_lines.append(f"\nAlert #{i}:")
+        report_lines.append(f"Type: {alert.get('type', 'Unknown')}")
+        report_lines.append(f"Severity: {alert.get('severity', 'Unknown')}")
+        report_lines.append(f"Summary: {alert.get('summary', 'No summary available')}")
+        report_lines.append(f"Timestamp: {alert.get('timestamp', datetime.now().isoformat())}")
+        
+        if 'actions' in alert:
+            report_lines.append("Recommended Actions:")
+            for action in alert['actions']:
+                report_lines.append(f"  - {action}")
+    
+    report_lines.append(f"\nTotal Alerts: {len(alerts)}")
+    report_lines.append(f"Processing completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    report_content = "\n".join(report_lines)
+    
+    # Save to daily report file
+    target_date = args.date if hasattr(args, 'date') and args.date else None
+    save_report_to_file(report_content, target_date)
+    
+    logger.warning(f"Processed {len(alerts)} alerts and saved to daily report")
 
 def main():
     """Main application entry point."""
     parser = argparse.ArgumentParser(description='Mood Sentinel - Social Media Mood Monitor')
     parser.add_argument('--config', default='config.yaml', help='Configuration file path')
     parser.add_argument('--once', action='store_true', help='Run once and exit')
+    parser.add_argument('--date', help='Target date for report (YYYY-MM-DD format)')
+    parser.add_argument('--weekly', action='store_true', help='Generate weekly report')
+    parser.add_argument('--no-telegram', action='store_true', help='Disable Telegram notifications')
     args = parser.parse_args()
     
     # Load configuration
@@ -58,6 +116,24 @@ def main():
     
     logger = logging.getLogger(__name__)
     logger.info("Starting Mood Sentinel...")
+    
+    # Handle command line arguments
+    if args.no_telegram:
+        logger.info("Telegram notifications disabled")
+        if 'notifications' not in config:
+            config['notifications'] = {}
+        config['notifications']['telegram_enabled'] = False
+    
+    if args.weekly:
+        logger.info("Weekly report mode enabled")
+    
+    if args.date:
+        logger.info(f"Target date set to: {args.date}")
+        try:
+            datetime.strptime(args.date, '%Y-%m-%d')
+        except ValueError:
+            logger.error("Invalid date format. Use YYYY-MM-DD")
+            sys.exit(1)
     
     try:
         # Initialize components
@@ -85,16 +161,25 @@ def main():
                 if alerts:
                     logger.warning(f"Generated {len(alerts)} alerts")
                     
+                    # Process alerts (save summary/actions and write reports)
+                    process_alerts(alerts, features, config, args)
+                    
                     # Generate reports
                     report = report_generator.create_alert_report(alerts, features)
                     
-                    # Send notifications
-                    notification_service.send_alerts(alerts, report)
+                    # Send notifications (unless disabled)
+                    if not args.no_telegram:
+                        notification_service.send_alerts(alerts, report)
+                    else:
+                        logger.info("Telegram notifications skipped (--no-telegram flag)")
                 
                 # Generate periodic reports
-                if should_generate_report(config):
+                if should_generate_report(config, args):
                     periodic_report = report_generator.create_periodic_report(features)
-                    notification_service.send_report(periodic_report)
+                    save_report_to_file(periodic_report, args.date if hasattr(args, 'date') else None)
+                    
+                    if not args.no_telegram:
+                        notification_service.send_report(periodic_report)
             
             if args.once:
                 break
@@ -113,13 +198,16 @@ def main():
     finally:
         logger.info("Mood Sentinel stopped")
 
-
-def should_generate_report(config: dict) -> bool:
+def should_generate_report(config: dict, args: argparse.Namespace = None) -> bool:
     """Determine if periodic report should be generated."""
+    # If weekly mode is enabled, generate report on specific conditions
+    if args and args.weekly:
+        now = datetime.now()
+        return now.weekday() == 0 and now.hour == 9  # Monday at 9 AM
+    
     # Simple logic: generate report every hour
     now = datetime.now()
     return now.minute == 0
-
 
 if __name__ == "__main__":
     main()
