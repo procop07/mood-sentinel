@@ -7,6 +7,7 @@ and alerts on concerning patterns.
 import sys
 import logging
 import argparse
+import sqlite3
 from datetime import datetime
 import yaml
 import os
@@ -39,6 +40,58 @@ def setup_logging(config: dict) -> None:
         ]
     )
 
+def setup_database(config: dict) -> str:
+    """Setup database and create alerts table if it doesn't exist."""
+    db_path = config.get('database', {}).get('path', 'mood_sentinel.db')
+    
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    # Create alerts table if it doesn't exist
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS alerts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            alert_type TEXT NOT NULL,
+            severity TEXT NOT NULL,
+            summary TEXT NOT NULL,
+            actions TEXT NOT NULL,
+            timestamp DATETIME NOT NULL,
+            report_date DATE NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    
+    conn.commit()
+    conn.close()
+    
+    return db_path
+
+def save_alert_to_database(alert: dict, db_path: str, report_date: str = None) -> None:
+    """Save alert to database alerts table."""
+    if not report_date:
+        report_date = datetime.now().strftime('%Y-%m-%d')
+    
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    # Convert actions list to string
+    actions_str = '; '.join(alert.get('actions', []))
+    
+    cursor.execute("""
+        INSERT INTO alerts (alert_type, severity, summary, actions, timestamp, report_date)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (
+        alert.get('type', 'Unknown'),
+        alert.get('severity', 'Unknown'),
+        alert.get('summary', 'No summary available'),
+        actions_str,
+        alert.get('timestamp', datetime.now().isoformat()),
+        report_date
+    ))
+    
+    conn.commit()
+    conn.close()
+
 def save_report_to_file(report_content: str, report_date: str = None) -> None:
     """Save report content to daily report file."""
     if not report_date:
@@ -58,8 +111,8 @@ def save_report_to_file(report_content: str, report_date: str = None) -> None:
     
     logging.info(f"Report saved to {report_filename}")
 
-def process_alerts(alerts: list, features: dict, config: dict, args: argparse.Namespace) -> None:
-    """Process alerts by saving summary/actions to alerts list and writing reports."""
+def process_alerts(alerts: list, features: dict, config: dict, args: argparse.Namespace, db_path: str) -> None:
+    """Process alerts by saving summary/actions to alerts list, database, and writing reports."""
     logger = logging.getLogger(__name__)
     
     if not alerts:
@@ -71,6 +124,10 @@ def process_alerts(alerts: list, features: dict, config: dict, args: argparse.Na
             alert['summary'] = f"Alert: {alert.get('type', 'Unknown')} detected"
         if 'actions' not in alert:
             alert['actions'] = ["Monitor situation", "Review sentiment patterns"]
+        
+        # Save alert to database
+        target_date = args.date if hasattr(args, 'date') and args.date else None
+        save_alert_to_database(alert, db_path, target_date)
     
     # Create report content
     report_lines = []
@@ -98,7 +155,7 @@ def process_alerts(alerts: list, features: dict, config: dict, args: argparse.Na
     target_date = args.date if hasattr(args, 'date') and args.date else None
     save_report_to_file(report_content, target_date)
     
-    logger.warning(f"Processed {len(alerts)} alerts and saved to daily report")
+    logger.warning(f"Processed {len(alerts)} alerts, saved to database and daily report")
 
 def main():
     """Main application entry point."""
@@ -113,6 +170,9 @@ def main():
     # Load configuration
     config = load_config(args.config)
     setup_logging(config)
+    
+    # Setup database
+    db_path = setup_database(config)
     
     logger = logging.getLogger(__name__)
     logger.info("Starting Mood Sentinel...")
@@ -161,8 +221,8 @@ def main():
                 if alerts:
                     logger.warning(f"Generated {len(alerts)} alerts")
                     
-                    # Process alerts (save summary/actions and write reports)
-                    process_alerts(alerts, features, config, args)
+                    # Process alerts (save summary/actions, database, and write reports)
+                    process_alerts(alerts, features, config, args, db_path)
                     
                     # Generate reports
                     report = report_generator.create_alert_report(alerts, features)
