@@ -4,7 +4,6 @@ Mood Sentinel - Main Application Entry Point
 A social media mood monitoring system that tracks sentiment
 and alerts on concerning patterns.
 """
-
 import sys
 import logging
 import argparse
@@ -12,7 +11,6 @@ import sqlite3
 from datetime import datetime
 import yaml
 import os
-
 from etl import DataExtractor
 from features import FeatureExtractor
 from rules import MoodRules
@@ -249,12 +247,13 @@ def main():
                 # Extract features
                 features = feature_extractor.process(raw_data)
                 
-                # Apply rules and detect issues - need to adapt to MoodRules interface
+                # Apply rules and detect issues - Fixed to use attribute access
                 alerts = []
                 for data_point in raw_data:
-                    # Assuming each data point has a mood_score and user_id
-                    mood_score = data_point.get('mood_score', 0.5)  # Default neutral
-                    user_id = data_point.get('user_id', 'unknown')
+                    # Use attribute access instead of dictionary .get() method
+                    # Assuming SocialMediaPost has mood_score attribute
+                    mood_score = getattr(data_point, 'mood_score', 0.5)  # Default neutral
+                    user_id = getattr(data_point, 'user_id', 'unknown')
                     
                     evaluation = rule_engine.evaluate_mood_score(mood_score, user_id)
                     if evaluation['action_required']:
