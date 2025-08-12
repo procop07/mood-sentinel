@@ -247,24 +247,31 @@ def main():
                 # Extract features
                 features = feature_extractor.process(raw_data)
                 
-                # Apply rules and detect issues - Fixed to use attribute access
+                # Apply rules and detect issues - Fixed implementation per requirements
                 alerts = []
-                for data_point in raw_data:
-                    # Use attribute access instead of dictionary .get() method
-                    # Assuming SocialMediaPost has mood_score attribute
-                    mood_score = getattr(data_point, 'mood_score', 0.5)  # Default neutral
-                    user_id = getattr(data_point, 'user_id', 'unknown')
-                    
-                    evaluation = rule_engine.evaluate_mood_score(mood_score, user_id)
-                    if evaluation['action_required']:
-                        alert = {
-                            'type': evaluation['alert_level'],
-                            'severity': evaluation['alert_level'],
-                            'summary': evaluation['message'],
-                            'actions': evaluation['recommendations'],
-                            'timestamp': evaluation['timestamp'].isoformat()
-                        }
-                        alerts.append(alert)
+                
+                # Compute single mood_score from features using avg_sentiment
+                avg_sentiment = features.get('avg_sentiment', 0.0)
+                # Map avg_sentiment from [-1, 1] to mood_score [0, 1]
+                mood_score = 0.5 + 0.5 * max(-1, min(1, avg_sentiment))
+                
+                # Generate user_id from raw_data using platform:author format
+                if raw_data:
+                    user_id = f"{raw_data[0].platform}:{raw_data[0].author}"
+                else:
+                    user_id = "default"
+                
+                # Evaluate mood score once for the entire dataset
+                evaluation = rule_engine.evaluate_mood_score(mood_score, user_id)
+                if evaluation['action_required']:
+                    alert = {
+                        'type': evaluation['alert_level'],
+                        'severity': evaluation['alert_level'],
+                        'summary': evaluation['message'],
+                        'actions': evaluation['recommendations'],
+                        'timestamp': evaluation['timestamp'].isoformat()
+                    }
+                    alerts.append(alert)
                 
                 if alerts:
                     logger.warning(f"Generated {len(alerts)} alerts")
