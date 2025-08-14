@@ -1,0 +1,89 @@
+name: Docker Compose Smoke Test
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  docker-compose-smoke:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Create .env file
+      run: |
+        cp .env.example .env
+        echo "DB_URL=sqlite:///app/data/mood_sentinel.db" >> .env
+        echo "ENV=production" >> .env
+    
+    - name: Start services with docker-compose
+      run: |
+        docker-compose up -d --build
+        echo "Waiting for services to start..."
+        sleep 30
+    
+    - name: Check service status
+      run: |
+        echo "=== Docker Compose Status ==="
+        docker-compose ps
+        echo "\n=== Container Logs ==="
+        docker-compose logs
+    
+    - name: Wait for application to be ready
+      run: |
+        echo "Waiting for application to be ready..."
+        timeout 120 bash -c 'until curl -f http://localhost:8000/health >/dev/null 2>&1; do echo "Waiting for app..."; sleep 5; done'
+        echo "Application is ready!"
+    
+    - name: Run smoke tests
+      run: |
+        echo "=== Running Smoke Tests ==="
+        
+        # Test health endpoint
+        echo "Testing /health endpoint:"
+        curl -v http://localhost:8000/health
+        echo "\n"
+        
+        # Test API v1 health endpoint  
+        echo "Testing /api/v1/health endpoint:"
+        curl -v http://localhost:8000/api/v1/health
+        echo "\n"
+        
+        # Verify health endpoint returns healthy status
+        HEALTH_STATUS=$(curl -s http://localhost:8000/health | jq -r '.status' 2>/dev/null || echo "unknown")
+        echo "Health status: $HEALTH_STATUS"
+        if [ "$HEALTH_STATUS" != "healthy" ]; then
+          echo "ERROR: Health check failed - status is not healthy"
+          exit 1
+        fi
+        
+        echo "✅ All smoke tests passed!"
+    
+    - name: Capture application logs
+      if: always()
+      run: |
+        echo "=== Application Logs ==="
+        docker-compose logs app || true
+        echo "\n=== Database Logs ==="
+        docker-compose logs db || true
+    
+    - name: Upload docker-compose logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: docker-compose-logs
+        path: |
+          docker-compose.yml
+        retention-days: 5
+    
+    - name: Cleanup
+      if: always()
+      run: |
+        echo "Cleaning up docker-compose services..."
+        docker-compose down -v
+        docker system prune -f
