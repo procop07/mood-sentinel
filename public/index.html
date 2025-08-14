@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mood Sentinel - Data Submission</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Mood Sentinel</h1>
+            <p>Submit your health data to Google Sheets</p>
+        </header>
+        
+        <main>
+            <form id="data-form" action="/api/submit" method="POST">
+                <div class="form-group">
+                    <label for="heart_rate">Heart Rate (BPM):</label>
+                    <input type="number" id="heart_rate" name="heart_rate" min="30" max="220">
+                </div>
+                
+                <div class="form-group">
+                    <label for="hrv">HRV (ms):</label>
+                    <input type="number" id="hrv" name="hrv" min="0" max="200" step="0.1">
+                </div>
+                
+                <div class="form-group">
+                    <label for="sleep_score">Sleep Score (0-100):</label>
+                    <input type="number" id="sleep_score" name="sleep_score" min="0" max="100">
+                </div>
+                
+                <div class="form-group">
+                    <label for="steps">Steps:</label>
+                    <input type="number" id="steps" name="steps" min="0">
+                </div>
+                
+                <div class="form-group">
+                    <label for="stress_level">Stress Level (1-10):</label>
+                    <input type="number" id="stress_level" name="stress_level" min="1" max="10">
+                </div>
+                
+                <div class="form-group">
+                    <label for="spo2">SpO2 (%):</label>
+                    <input type="number" id="spo2" name="spo2" min="70" max="100">
+                </div>
+                
+                <div class="form-group">
+                    <label for="resting_hr">Resting Heart Rate (BPM):</label>
+                    <input type="number" id="resting_hr" name="resting_hr" min="30" max="120">
+                </div>
+                
+                <div class="form-group">
+                    <label for="sleep_start">Sleep Start Time:</label>
+                    <input type="datetime-local" id="sleep_start" name="sleep_start">
+                </div>
+                
+                <div class="form-group">
+                    <label for="sleep_end">Sleep End Time:</label>
+                    <input type="datetime-local" id="sleep_end" name="sleep_end">
+                </div>
+                
+                <div class="form-group">
+                    <label for="activity_minutes">Activity Minutes:</label>
+                    <input type="number" id="activity_minutes" name="activity_minutes" min="0">
+                </div>
+                
+                <div class="form-group">
+                    <label for="notes">Notes:</label>
+                    <textarea id="notes" name="notes" rows="3" placeholder="Optional notes about your day..."></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label for="data_source">Data Source:</label>
+                    <select id="data_source" name="data_source" required>
+                        <option value="">Select source...</option>
+                        <option value="manual">Manual Entry</option>
+                        <option value="zepp">Zepp App</option>
+                        <option value="fitbit">Fitbit</option>
+                        <option value="apple_health">Apple Health</option>
+                        <option value="google_fit">Google Fit</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="submit" id="submit-btn">Submit Data</button>
+                    <button type="reset">Reset Form</button>
+                </div>
+            </form>
+            
+            <div id="response-message" class="response-message" style="display: none;"></div>
+        </main>
+    </div>
+    
+    <script>
+        document.getElementById('data-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const data = Object.fromEntries(formData.entries());
+            
+            // Add timestamp
+            data.timestamp = new Date().toISOString();
+            
+            const submitBtn = document.getElementById('submit-btn');
+            const responseDiv = document.getElementById('response-message');
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Submitting...';
+            
+            try {
+                const response = await fetch('/api/submit', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    responseDiv.className = 'response-message success';
+                    responseDiv.textContent = 'Data submitted successfully!';
+                    this.reset();
+                } else {
+                    responseDiv.className = 'response-message error';
+                    responseDiv.textContent = result.message || 'Error submitting data';
+                }
+            } catch (error) {
+                responseDiv.className = 'response-message error';
+                responseDiv.textContent = 'Network error: ' + error.message;
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Submit Data';
+                responseDiv.style.display = 'block';
+                
+                // Hide message after 5 seconds
+                setTimeout(() => {
+                    responseDiv.style.display = 'none';
+                }, 5000);
+            }
+        });
+    </script>
+</body>
+</html>
