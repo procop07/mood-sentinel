@@ -1,10 +1,8 @@
 """
 Feature Extraction Module
-
 Extracts features from social media posts for analysis.
 Includes sentiment analysis, keyword detection, and engagement metrics.
 """
-
 import logging
 import re
 from typing import List, Dict, Any, Optional
@@ -46,8 +44,8 @@ class FeatureExtractor:
         self.negative_keywords = processing_config.get('keywords', {}).get('negative', [])
         self.positive_keywords = processing_config.get('keywords', {}).get('positive', [])
     
-    def process(self, posts: List[SocialMediaPost]) -> List[PostFeatures]:
-        """Extract features from list of posts."""
+    def process(self, posts: List[SocialMediaPost]) -> Dict[str, Any]:
+        """Extract features from list of posts and return dict with avg_sentiment."""
         features = []
         
         for post in posts:
@@ -58,7 +56,20 @@ class FeatureExtractor:
                 self.logger.error(f"Error extracting features from post {post.id}: {e}")
         
         self.logger.info(f"Extracted features from {len(features)} posts")
-        return features
+        
+        # Calculate avg_sentiment from all features
+        if features:
+            sentiment_scores = [f.sentiment_score for f in features]
+            avg_sentiment = sum(sentiment_scores) / len(sentiment_scores)
+        else:
+            avg_sentiment = 0.0
+        
+        # Return dictionary with avg_sentiment for main.py compatibility
+        return {
+            'avg_sentiment': avg_sentiment,
+            'features_list': features,  # Keep original list for other uses
+            'total_posts': len(features)
+        }
     
     def extract_features(self, post: SocialMediaPost) -> PostFeatures:
         """Extract all features from a single post."""
